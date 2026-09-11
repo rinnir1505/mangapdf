@@ -21,8 +21,16 @@ export const THUMB_MAX_EDGE = 220;
 export const SAFE_CANVAS_AREA = 16_000_000;
 export const SAFE_CANVAS_SIDE = 8192;
 
-/** この容量を超えたら分割を提案する */
-export const SPLIT_SUGGEST_BYTES = 400 * 1024 * 1024;
+/**
+ * 分割したとき 1 ファイルが目指す上限。
+ * iOS の共有シートは大きなファイルで失敗することがあり、
+ * 実測の報告は 50MB 台から数百 MB までばらつく。
+ * 安全側に寄せつつ、ファイル数が増えすぎない値にしている。
+ */
+export const SHARE_SAFE_BYTES = 150 * 1024 * 1024;
+
+/** これを超えたら、そのままでは共有に失敗しうると警告する */
+export const LARGE_OUTPUT_BYTES = 250 * 1024 * 1024;
 
 export type QualityMode = 'original' | 'high' | 'share';
 

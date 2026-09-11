@@ -5,7 +5,8 @@ import {
   PAGE_LONG_EDGE_PT,
   QUALITY_ORDER,
   QUALITY_PRESETS,
-  SPLIT_SUGGEST_BYTES,
+  LARGE_OUTPUT_BYTES,
+  SHARE_SAFE_BYTES,
   type QualityMode,
 } from './config';
 import { formatBytes, sanitizeFileName } from './lib/format';
@@ -248,9 +249,12 @@ function renderEditor(): HTMLElement[] {
   nodes.push(qualityField);
 
   // 分割
-  const splitNeeded = pageCount > 25;
-  if (splitNeeded) {
+  if (pageCount > 2) {
+    const parts = partCount();
+    const isOriginal = state.quality === 'original';
+    const perPart = isOriginal ? formatBytes(totalBytes() / parts) : null;
     const splitField = h('div', { class: 'field' });
+
     splitField.append(
       h(
         'button',
@@ -265,23 +269,29 @@ function renderEditor(): HTMLElement[] {
         },
         h('span', { class: 'checkbox-box', text: state.split ? '✓' : '' }),
         h('span', { class: 'quality-text' },
-          h('span', { class: 'quality-name', text: 'PDFを2つに分ける' }),
+          h('span', { class: 'quality-name', text: `PDFを${parts}つに分ける` }),
           h('span', {
             class: 'quality-note',
-            text: `${splitSizes(pageCount).join(' ページ + ')} ページに分けて作成`,
+            text: perPart
+              ? `${splitSizes(pageCount, parts).join('・')} ページずつ（各 約${perPart}）`
+              : `${splitSizes(pageCount, parts).join('・')} ページずつ`,
           }),
         ),
       ),
     );
-    if (state.quality === 'original' && totalBytes() > SPLIT_SUGGEST_BYTES && !state.split) {
-      splitField.append(
-        h('div', {
-          class: 'field-hint',
-          text: '容量が大きいため、2つに分けると共有や保存がしやすくなります。',
-        }),
-      );
-    }
     nodes.push(splitField);
+  }
+
+  // 容量が大きすぎる場合の警告
+  if (state.quality === 'original' && !state.split && totalBytes() > LARGE_OUTPUT_BYTES) {
+    nodes.push(
+      h('div', { class: 'notice notice-warn' },
+        `このままだと約 ${formatBytes(totalBytes())} のPDFになります。`,
+        document.createElement('br'),
+        'iPhoneでは大きすぎて共有や保存が進まないことがあります。',
+        '「高画質」に変えるか、上の分割をお使いください。',
+      ),
+    );
   }
 
   // ファイル名
@@ -703,15 +713,32 @@ function suggestName(pages: Page[]): string {
 
 /* ────────── PDF 作成 ────────── */
 
-function splitSizes(total: number): number[] {
-  const first = Math.ceil(total / 2);
-  return [first, total - first];
+/**
+ * 何分割するか。原寸なら完成容量が元画像の合計とほぼ等しいので、
+ * 1 ファイルが SHARE_SAFE_BYTES に収まる数を逆算できる。
+ * 縮小する場合は容量が読めないため 2 分割にとどめる。
+ */
+function partCount(): number {
+  if (state.quality !== 'original') return 2;
+  const needed = Math.ceil(totalBytes() / SHARE_SAFE_BYTES);
+  return Math.min(state.pages.length, Math.max(2, needed));
+}
+
+function splitSizes(total: number, parts: number): number[] {
+  const base = Math.floor(total / parts);
+  const extra = total % parts;
+  return Array.from({ length: parts }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
 function chunkPages(): Page[][] {
   if (!state.split || state.pages.length <= 1) return [state.pages];
-  const [first] = splitSizes(state.pages.length);
-  return [state.pages.slice(0, first), state.pages.slice(first)];
+  const chunks: Page[][] = [];
+  let at = 0;
+  for (const size of splitSizes(state.pages.length, partCount())) {
+    chunks.push(state.pages.slice(at, at + size));
+    at += size;
+  }
+  return chunks;
 }
 
 function updateProgress(done: number, total: number): void {
