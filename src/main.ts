@@ -48,6 +48,7 @@ const state = {
   progress: { done: 0, total: 0 },
   notice: null as Notice,
   busyLabel: null as string | null,
+  saving: null as { label: string; hint: string } | null,
 };
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
@@ -127,6 +128,45 @@ function render(): void {
       root.append(renderMasthead(), renderDone());
       break;
   }
+
+  if (state.saving) root.append(renderSavingOverlay(state.saving));
+}
+
+function renderSavingOverlay(saving: { label: string; hint: string }): HTMLElement {
+  const overlay = h(
+    'div',
+    { class: 'overlay', role: 'status', 'aria-live': 'polite' },
+    h('div', { class: 'overlay-card' },
+      h('div', { class: 'spinner' }),
+      h('div', { class: 'overlay-label', text: saving.label }),
+      h('div', { class: 'overlay-hint', text: saving.hint }),
+      // 共有が応答しないまま閉じ込められないよう、必ず抜け道を用意する
+      h('button', {
+        class: 'btn btn-quiet',
+        text: '閉じる',
+        onclick: () => {
+          state.saving = null;
+          render();
+        },
+      }),
+    ),
+  );
+  return overlay;
+}
+
+/**
+ * 実際にバイトが動くのは保存のときだけで、そこには進捗イベントが無い。
+ * せめて容量から所要時間の見当を伝えて、固まったと誤解されないようにする。
+ */
+function waitHint(bytes: number): string {
+  const size = formatBytes(bytes);
+  if (bytes >= 300 * 1024 * 1024) {
+    return `${size} あります。大きいため1分以上かかることがあります。この画面のままお待ちください。`;
+  }
+  if (bytes >= 100 * 1024 * 1024) {
+    return `${size} あります。少し時間がかかります。`;
+  }
+  return `${size} を準備しています。`;
 }
 
 function renderMasthead(): HTMLElement {
@@ -493,7 +533,7 @@ function renderDone(): HTMLElement {
       actions.append(
         h(
           'button',
-          { class: 'btn', onclick: () => void handleShare(output) },
+          { class: 'btn', onclick: () => handleShare(output) },
           // iOS の共有シートには「"ファイル"に保存」が含まれる。
           // 保存もここから行うのが確実なので、ボタン名でそう伝える。
           ios ? '保存・共有する' : '共有する',
@@ -866,12 +906,25 @@ function cancelGenerate(): void {
   render();
 }
 
-async function handleShare(output: OutputFile): Promise<void> {
-  const result = await sharePdf(output.blob, output.name);
-  if (result === 'unsupported') {
-    setNotice('warn', 'この環境では共有できませんでした。下の保存ボタンをお使いください。');
+function handleShare(output: OutputFile): void {
+  // navigator.share はユーザー操作から同期的に呼ぶ必要があるため、
+  // 画面を書き換える前に呼び出しておく。
+  const shared = sharePdf(output.blob, output.name);
+
+  state.saving = { label: '共有の準備をしています', hint: waitHint(output.blob.size) };
+  render();
+
+  void shared.then((result) => {
+    state.saving = null;
+    if (result === 'unsupported') {
+      setNotice(
+        'warn',
+        'この環境では共有できませんでした。ファイルが大きすぎる可能性があります。' +
+          '画質を下げるか、分割してお試しください。',
+      );
+    }
     render();
-  }
+  });
 }
 
 function handleSave(output: OutputFile): void {

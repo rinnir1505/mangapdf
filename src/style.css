@@ -506,6 +506,57 @@ button {
   color: #8a2f22;
 }
 
+/* ── 保存・共有の待ち表示 ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 22, 26, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 50;
+}
+.overlay-card {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+.spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--line);
+    background: var(--accent);
+  }
+}
+.overlay-label {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.overlay-hint {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
 .inapp-warning {
   display: flex;
   flex-direction: column;
