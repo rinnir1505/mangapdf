@@ -1,8 +1,10 @@
-# まんがPDF
+# mangapdf（まんがPDF）
 
-漫画のJPG画像をまとめて1つのPDFにする Web アプリ。
+あなたが描いたマンガをPDFに変換します。
 
-iPhone から数タップで、原稿を端末の外に出さずに PDF を作れる。
+iPhone から数タップで、原稿を端末の外に出さずに PDF を作れる Web アプリ。
+
+https://rinnir1505.github.io/mangapdf/
 
 ## 原則
 
@@ -68,14 +70,27 @@ npm run typecheck
 
 ## 公開
 
-Cloudflare Pages（無料枠・静的配信のみ）。
+https://rinnir1505.github.io/mangapdf/
 
-- ビルドコマンド: `npm run build`
-- 出力ディレクトリ: `dist`
-- Functions / Workers / KV / R2 / D1 は**使わない**
-- 独自ドメインは購入せず `*.pages.dev` を使う
+GitHub Pages（無料）。`main` へ push すると `.github/workflows/deploy.yml` が
+ビルドして自動デプロイする。パブリックリポジトリなので Actions も Pages も
+無料枠で、従量課金は発生しない。
 
-`public/_headers` に CSP を置いてある。Cloudflare Pages が自動で適用する。
+### 初回のみ必要な設定
+
+リポジトリの **Settings → Pages → Build and deployment → Source** を
+**「GitHub Actions」** に変更する。（既定の「Deploy from a branch」のままだと
+Jekyll が README を変換したページが表示され続ける）
+
+### CSP について
+
+GitHub Pages はレスポンスヘッダを設定できないため、CSP は本番ビルド時に
+`<meta>` タグとして埋め込んでいる（`vite.config.ts`）。`connect-src 'none'`
+により、**外部への通信がブラウザ自身によって禁止される**。原稿を送らないことが
+実装上の約束ではなく、ブラウザによる強制になる。
+
+`public/_headers` は Cloudflare Pages へ移す場合用に残してある。
+GitHub Pages では効果がない。
 
 ## 検証済み項目
 
