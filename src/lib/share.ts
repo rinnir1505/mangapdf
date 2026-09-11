@@ -10,6 +10,24 @@ export function isIOS(): boolean {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
 }
 
+/**
+ * LINE などのアプリ内ブラウザ（WebView）で開かれていないか調べる。
+ *
+ * WebView はファイルのダウンロードができず、共有 API も使えないことが多い。
+ * 「プレビューは出るのに保存できない」という状態になるため、
+ * 気づけるように名前を返す。通常のブラウザなら null。
+ */
+export function inAppBrowserName(): string | null {
+  const ua = navigator.userAgent;
+  if (/\bLine\//i.test(ua)) return 'LINE';
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return 'Facebook';
+  if (/Instagram/i.test(ua)) return 'Instagram';
+  if (/\bTwitter/i.test(ua)) return 'X';
+  // iOS で Safari を名乗らないものは WebView とみなす
+  if (isIOS() && !/Safari\//.test(ua)) return 'アプリ内ブラウザ';
+  return null;
+}
+
 export function canSharePdf(): boolean {
   return typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
 }

@@ -15,7 +15,7 @@ import { makeThumbnail, prepareForPdf } from './lib/imagePrep';
 import { displaySize, readJpegInfo, type JpegInfo } from './lib/jpeg';
 import { naturalCompare } from './lib/naturalSort';
 import { AbortError, writeImagePdf } from './lib/pdfWriter';
-import { canSharePdf, isIOS, savePdf, sharePdf } from './lib/share';
+import { canSharePdf, inAppBrowserName, isIOS, savePdf, sharePdf } from './lib/share';
 
 /* ────────── 型と状態 ────────── */
 
@@ -109,6 +109,10 @@ function render(): void {
     root.append(renderBusy(state.busyLabel));
     return;
   }
+
+  const inApp = inAppBrowserName();
+  if (inApp) root.append(renderInAppWarning(inApp));
+
   switch (state.screen) {
     case 'start':
       root.append(renderMasthead(), renderStart());
@@ -168,6 +172,47 @@ function renderStart(): HTMLElement {
     ),
     state.notice ? renderNotice(state.notice) : null,
   );
+}
+
+function renderInAppWarning(appName: string): HTMLElement {
+  const box = h('div', { class: 'notice notice-error inapp-warning' });
+  box.append(
+    h('strong', { text: `${appName}の中で開いています` }),
+    h('span', {
+      text:
+        'このままではPDFを保存できません。' +
+        'ブラウザ（Safariなど）で開き直してください。',
+    }),
+  );
+  if (appName === 'LINE') {
+    box.append(
+      h('span', {
+        class: 'inapp-how',
+        text: '画面の右下にある「…」または矢印のマークから「Safariで開く」を選べます。',
+      }),
+    );
+  }
+  box.append(
+    h(
+      'button',
+      {
+        class: 'btn btn-secondary',
+        onclick: () => {
+          void navigator.clipboard?.writeText(location.href).then(
+            () => setNoticeAndRender('warn', 'URLをコピーしました。Safariに貼り付けて開いてください。'),
+            () => setNoticeAndRender('warn', 'URLをコピーできませんでした。アドレス欄から手動でコピーしてください。'),
+          );
+        },
+      },
+      'このページのURLをコピー',
+    ),
+  );
+  return box;
+}
+
+function setNoticeAndRender(kind: 'warn' | 'error', text: string): void {
+  setNotice(kind, text);
+  render();
 }
 
 function renderNotice(notice: NonNullable<Notice>): HTMLElement {
