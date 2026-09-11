@@ -14,7 +14,7 @@ import { makeThumbnail, prepareForPdf } from './lib/imagePrep';
 import { displaySize, readJpegInfo, type JpegInfo } from './lib/jpeg';
 import { naturalCompare } from './lib/naturalSort';
 import { AbortError, writeImagePdf } from './lib/pdfWriter';
-import { canSharePdf, downloadPdf, sharePdf } from './lib/share';
+import { canSharePdf, isIOS, savePdf, sharePdf } from './lib/share';
 
 /* ────────── 型と状態 ────────── */
 
@@ -30,6 +30,8 @@ interface OutputFile {
   blob: Blob;
   name: string;
   pageCount: number;
+  /** 完了画面を離れるまで保持する。途中で解放すると iOS で保存できなくなる */
+  url: string;
 }
 
 type Screen = 'start' | 'editor' | 'progress' | 'done';
@@ -431,9 +433,16 @@ function renderDone(): HTMLElement {
     );
 
     const actions = h('div', { class: 'btn-stack' });
+    const ios = isIOS();
     if (shareable) {
       actions.append(
-        h('button', { class: 'btn', onclick: () => void handleShare(output) }, '共有する'),
+        h(
+          'button',
+          { class: 'btn', onclick: () => void handleShare(output) },
+          // iOS の共有シートには「"ファイル"に保存」が含まれる。
+          // 保存もここから行うのが確実なので、ボタン名でそう伝える。
+          ios ? '保存・共有する' : '共有する',
+        ),
       );
     }
     actions.append(
@@ -441,9 +450,9 @@ function renderDone(): HTMLElement {
         'button',
         {
           class: shareable ? 'btn btn-secondary' : 'btn',
-          onclick: () => downloadPdf(output.blob, output.name),
+          onclick: () => handleSave(output),
         },
-        'PDFを保存',
+        ios ? 'PDFを開いて確認' : 'PDFを保存',
       ),
     );
     card.append(actions);
@@ -456,7 +465,9 @@ function renderDone(): HTMLElement {
     wrap.append(
       h('div', {
         class: 'field-hint',
-        text: '「共有する」からGoogle Driveやメールなど、お使いのアプリへ渡せます。',
+        text: isIOS()
+          ? '「保存・共有する」を押すと、Google Drive・メール・「”ファイル”に保存」から渡し先を選べます。'
+          : '「共有する」からGoogle Driveやメールなど、お使いのアプリへ渡せます。',
       }),
     );
   }
@@ -719,7 +730,7 @@ async function generate(): Promise<void> {
   abortController = controller;
 
   state.notice = null;
-  state.outputs = [];
+  revokeOutputs();
   state.progress = { done: 0, total: state.pages.length };
   state.screen = 'progress';
   render();
@@ -750,7 +761,7 @@ async function generate(): Promise<void> {
         chunks.length > 1
           ? sanitizeFileName(`${state.baseName}_${index + 1}`)
           : sanitizeFileName(state.baseName);
-      outputs.push({ blob, name, pageCount: chunk.length });
+      outputs.push({ blob, name, pageCount: chunk.length, url: URL.createObjectURL(blob) });
     }
 
     state.outputs = outputs;
@@ -786,12 +797,35 @@ function cancelGenerate(): void {
 async function handleShare(output: OutputFile): Promise<void> {
   const result = await sharePdf(output.blob, output.name);
   if (result === 'unsupported') {
-    setNotice('warn', 'この環境では共有できませんでした。「PDFを保存」をお使いください。');
+    setNotice('warn', 'この環境では共有できませんでした。下の保存ボタンをお使いください。');
     render();
   }
 }
 
+function handleSave(output: OutputFile): void {
+  const result = savePdf(output.url, output.name);
+  if (result === 'opened') {
+    setNotice(
+      'warn',
+      '新しいタブでPDFを開きました。画面下の共有ボタン（□に↑）から「”ファイル”に保存」を選ぶと保存できます。この画面は残してあるので、戻ればやり直せます。',
+    );
+    render();
+  } else if (result === 'blocked') {
+    setNotice(
+      'warn',
+      'ポップアップがブロックされました。「共有する」から保存してください。',
+    );
+    render();
+  }
+}
+
+function revokeOutputs(): void {
+  for (const output of state.outputs) URL.revokeObjectURL(output.url);
+  state.outputs = [];
+}
+
 function backToEditor(): void {
+  revokeOutputs();
   state.screen = 'editor';
   state.notice = null;
   render();
@@ -803,7 +837,7 @@ function resetAll(): void {
   }
   thumbQueue.length = 0;
   state.pages = [];
-  state.outputs = [];
+  revokeOutputs();
   state.split = false;
   state.baseName = 'manga';
   state.notice = null;
